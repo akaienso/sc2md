@@ -32,99 +32,170 @@ limitations under the License.
 
 import os
 import re
+import argparse
+import sys
 
-# ANCHOR: Environment Setup
-# Define current environments for source code and Markdown. These settings dictate which paths will be used for source code and Markdown files.
-current_sourcecode_environment = 'dev'  # Possible values: 'dev', 'repo', 'dist'
-current_markdown_environment = 'obsidian'  # Possible values: 'obsidian', 'dropbox'
+# Initialize the argument parser
+parser = argparse.ArgumentParser(description="Inject source code into Markdown documents.")
 
-# ANCHOR: source code Path Configuration
-# source code environment directory paths. Modify these paths to match the locations on your system.
-if current_sourcecode_environment == 'dev':
-    # NOTE: Developer Tip - Ensure the development path is accessible and correct for your environment.
-    sourcecode_env_path = r'C:\Users\rob\workbench\wordpress\local-sites\osdia-national-website\app\public\wp-content\themes\osdia\inc\nelagala'
-elif current_sourcecode_environment == 'repo':
-    # NOTE: Developer Tip - The repository path should point to the version-controlled source of your source code files.
-    sourcecode_env_path = r'C:\Users\rob\workbench\client-sites\OSDIA\themes\osdia-theme\inc\nelagala'
-elif current_sourcecode_environment == 'dist':
-    # NOTE: Developer Tip - Distribution path is where the production-ready files reside, often in a staging or live environment.
-    sourcecode_env_path = r'C:\Users\rob\Dropbox\Projects\NELAGala'
+# Define the optional arguments
+parser.add_argument("-i", "--interactive", action="store_true", help="Enable interactive mode for confirmation before each injection.")
+parser.add_argument("-l", "--extensions", type=str, help="Comma-separated list of file extensions to include. Example: -l php,scss,html")
+parser.add_argument("-n", "--names", type=str, help="Comma-separated list of filenames to specifically inject. Example: -n functions.php,landing-page.php")
 
-# ANCHOR: Markdown Path Configuration
-# Similar to source code, configure the Markdown environment paths here.
-if current_markdown_environment == 'obsidian':
-    md_env_path = r'C:\Users\rob\workbench\Notes\Obsidian\Member Minder Pro\Client Sites\OSDIA\National\NELAGala'
-elif current_markdown_environment == 'dropbox':
-    md_env_path = r'C:\Users\rob\Dropbox\Notes\Work\MMP\Client Sites\OSDIA\National\NELAGala'
+# Parse the arguments
+args = parser.parse_args()
 
-# ANCHOR: File Listings
-# Define the lists of source code filenames and the single Markdown filename involved in the document generation process.
-# NOTE: User Tip - Update this list to include any new source code files you need to process. Add or remove filenames as needed. 
-sourcecode_filenames = ['functions.php', 'landing-page.php', 'template-parts/section-header.php', 'template-parts/section-about.php', 'template-parts/section-navigation.php', 'styles/main/styles.scss', 'styles/main/reset.scss', 'styles/main/styles.scss', 'styles/partials/_typography.scss', 'styles/partials/_variables.scss', 'styles/partials/_navbar-responsive.scss', 'styles/partials/_navigation.scss', 'styles/partials/_nelagala-design.scss', 'styles/partials/_header.css']
-markdown_filename = 'NELAGala Dev Prompt.md'
+if args.interactive:
+    print("Interactive mode enabled.")
+if args.extensions:
+    extensions = args.extensions.split(',')
+    print("Filtering for extensions:", extensions)
+if args.names:
+    names = args.names.split(',')
+    print("Specific files to inject:", names)
 
+# Prompt for the Markdown file path
+markdown_path = input("Enter the full path to the Markdown file (leave empty to create a new one): ").strip()
 
-# ANCHOR: Markdown Path Assembly
-# Full path for the Markdown file. Combines the environment path and the Markdown filename.
-markdown_path = os.path.join(md_env_path, markdown_filename)
+if markdown_path:
+    # Check if the specified Markdown file exists
+    if not os.path.exists(markdown_path):
+        print(f"The specified Markdown file does not exist: {markdown_path}")
+        create_new = input("Would you like to create this Markdown file? (y/n): ").strip().lower()
+        if create_new == 'y':
+            # Create a new Markdown file with a header based on the file name
+            with open(markdown_path, 'w', encoding='utf-8') as md_file:
+                md_file.write(f"# {os.path.basename(markdown_path)}\n\n")
+            print(f"Created a new Markdown file: {markdown_path}")
+        else:
+            print("Please specify an existing Markdown file.")
+            sys.exit()
+else:
+    # No path provided; prompt for a file name and create a new file in a default directory
+    default_directory = r"C:\Users\rob\workbench\Notes\Obsidian\Member Minder Pro\inbox"
+    filename = input("Enter a name for the new Markdown file: ").strip() + ".md"
+    markdown_path = os.path.join(default_directory, filename)
+    with open(markdown_path, 'w', encoding='utf-8') as md_file:
+        md_file.write(f"# {filename}\n\n")
+    print(f"Created a new Markdown file: {markdown_path}")
 
-# ANCHOR: Regex Pattern for Headers
-# Define the regex pattern for finding any Markdown header. Used to locate injection points in the Markdown document.
-any_header_pattern = r'^#+ '
+# Prompt for the source code directory path
+while True:
+    source_code_dir = input("Enter the path to the root of the source code directory (required): ").strip()
 
-# ANCHOR: Markdown File Reading
-# Open and read the Markdown file specified by `markdown_path`.
+    # Check if input is empty (user wants to exit)
+    if not source_code_dir:
+        print("No input received. If you wish to exit the script, press 'Enter' again; otherwise, please provide a valid path.")
+        second_chance = input().strip()
+        if second_chance == '':
+            print("Exiting the script. No changes made.")
+            sys.exit()
+        else:
+            # Check if the second chance input is a valid directory before assigning
+            if os.path.isdir(second_chance):
+                source_code_dir = second_chance
+                break  # Valid directory provided, exit loop
+            else:
+                print(f"The provided path does not exist or is not a directory: {second_chance}")
+                # The loop will continue, prompting the user again
+    elif os.path.isdir(source_code_dir):
+        break  # Valid directory provided, exit loop
+    else:
+        print(f"The specified path does not exist or is not a directory: {source_code_dir}")
+        # Loop will continue, prompting the user again without an explicit 'exit' option shown
+
+# After determining markdown_path and source_code_dir
+# Read the Markdown file into `lines`
 with open(markdown_path, 'r') as md_file:
     lines = md_file.readlines()
 
-# ANCHOR: source code File Processing
-# Loop through each source code filename, read its contents, and insert it into the Markdown document at the appropriate location.
+def get_files_to_process(directory, extensions=None, names=None):
+    excluded_extensions = ['log', 'tmp']  # Add any other extensions you wish to exclude
+    files_to_process = []
+    for root, dirs, files in os.walk(directory, topdown=True):
+        # Exclude hidden directories from dirs
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for file in files:
+            # Skip hidden files and files with excluded extensions
+            if file.startswith('.') or file.split('.')[-1] in excluded_extensions:
+                continue
+            if extensions and not file.split('.')[-1] in extensions:
+                continue
+            if names and file not in names:
+                continue
+            files_to_process.append(os.path.join(root, file))
+    return files_to_process
+
+extensions = args.extensions.split(',') if args.extensions else None
+names = args.names.split(',') if args.names else None
+files_to_process = get_files_to_process(source_code_dir, extensions, names)
+
+# Keep the regex pattern for any Markdown header
+any_header_pattern = r'^#+ '
+
+# Initialize a counter for processed files
 processed_files_count = 0
-for sourcecode_filename in sourcecode_filenames:
-    # Full path for the source code file
-    sourcecode_path = os.path.join(sourcecode_env_path, sourcecode_filename)
-    print(f"Reading {sourcecode_filename}...")
-    processed_files_count += 1
+# Initialize a variable to track the last insertion index
+last_insertion_index = len(lines) - 1
 
-    # Read the source code file content
-    with open(sourcecode_path, 'r') as file:
-        sourcecode_content = file.read()
+for sourcecode_path in files_to_process:
+    sourcecode_filename = os.path.basename(sourcecode_path)
+    print(f"Processing {sourcecode_filename}...")
 
-    # NOTE: Developer Tip - Modify the regex pattern below if your document uses a different scheme for headers.
+    if args.interactive:
+        confirm = input(f"Inject {sourcecode_filename} into the Markdown file? (y/n): ")
+        if confirm.lower() != 'y':
+            continue
+
+    try:
+        with open(sourcecode_path, 'r', encoding='utf-8') as file:
+            sourcecode_content = file.read()
+        
+        # Escape code block delimiters in the source code content
+        # This line goes right after reading the file content
+        sourcecode_content = sourcecode_content.replace("```", "`\u200B``")
+        
+    except UnicodeDecodeError:
+        print(f"Skipping {sourcecode_path} due to encoding issues.")
+        continue
+
+    # Define the injection point pattern using the source code filename
     injection_point_pattern = r'^#+ ' + re.escape(sourcecode_filename) + r'$'
+    injection_point_found = False
 
-    # Search for the exact place to inject the source code content within the Markdown file.
-    injection_point = None
+    # Try to find an existing injection point
     for i, line in enumerate(lines):
         if re.match(injection_point_pattern, line.strip()):
-            injection_point = i + 1
+            injection_point_index = i + 1  # Assumes content goes after the header line
+            injection_point_found = True
             break
 
-    # If a matching header is found, find the next headline or EOF to replace the content
-    if injection_point is not None:
-        end_point = None
-        for i in range(injection_point, len(lines)):
-            if re.match(any_header_pattern, lines[i].strip()) and i != injection_point:  # Ensure it's not the same header
-                end_point = i
-                break
-        
-        # Prepare the source code content with code block formatting for Markdown.
-        sourcecode_block = f"```php\n{sourcecode_content}\n```\n"
-        
-        # Replace or insert the source code content
-        if end_point:
-            # Replace content between headers
-            lines = lines[:injection_point] + [sourcecode_block] + lines[end_point:]
+    # Construct the source code block with possibly escaped delimiters now
+    file_extension = sourcecode_path.split('.')[-1]
+    sourcecode_block = f"```{file_extension}\n{sourcecode_content}\n```\n"
+
+    if injection_point_found:
+        # Insert the source code content at the found injection point
+        lines.insert(injection_point_index, sourcecode_block)
+        last_insertion_index = injection_point_index  # Update the last insertion index
+    else:
+        # Create a new header for the source code and append it after the last insertion point
+        new_header = f"### {sourcecode_filename}\n"
+        new_content = f"{new_header}{sourcecode_block}\n"
+        if last_insertion_index < len(lines) - 1:
+            lines.insert(last_insertion_index + 1, new_content)
         else:
-            # No subsequent header, append everything after the injection point
-            lines = lines[:injection_point] + [sourcecode_block]
-            
-print(f"Processed {processed_files_count} files.")
+            lines.append(new_content)
+        last_insertion_index = len(lines)  # Update the last insertion index to the end
+
+    processed_files_count += 1
 
 # ANCHOR: Markdown File Writing
 # Write the modified content back to the Markdown file, updating it with the inserted source code code blocks.
-with open(markdown_path, 'w') as md_file:
-    print("Writing changes to the Markdown file...")
+with open(markdown_path, 'w', encoding='utf-8') as md_file:
     md_file.writelines(lines)
-    
+
+print(f"Processed {processed_files_count} files.")
 print("All done! The Markdown file has been updated with the source code blocks.")
+
