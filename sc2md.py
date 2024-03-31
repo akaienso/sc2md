@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Script Name: Source Code to Markdown Processor (sc2md)
 Description: This script automates the process of injecting source code into specific readable and foldable code-block sections of a Markdown file. It is designed to facilitate the documentation of various programming languages and their usage within a Markdown-based documentation system. The script reads the specified Markdown file, locates headers corresponding to source code filenames, and inserts the file contents formatted as code blocks within the Markdown file. This process is configurable and relies on the current environment settings for both source code and Markdown files to determine the correct file paths.
@@ -82,28 +83,30 @@ else:
 
 # Prompt for the source code directory path
 while True:
-    source_code_dir = input("Enter the path to the root of the source code directory (required): ").strip()
-
-    # Check if input is empty (user wants to exit)
-    if not source_code_dir:
-        print("No input received. If you wish to exit the script, press 'Enter' again; otherwise, please provide a valid path.")
-        second_chance = input().strip()
-        if second_chance == '':
-            print("Exiting the script. No changes made.")
-            sys.exit()
-        else:
-            # Check if the second chance input is a valid directory before assigning
-            if os.path.isdir(second_chance):
-                source_code_dir = second_chance
-                break  # Valid directory provided, exit loop
-            else:
-                print(f"The provided path does not exist or is not a directory: {second_chance}")
-                # The loop will continue, prompting the user again
-    elif os.path.isdir(source_code_dir):
+    source_code_dir_input = input("Enter the path to the root of the source code directory (required): ").strip()
+    
+    # Resolve the relative path to an absolute path immediately
+    source_code_dir = os.path.abspath(source_code_dir_input)
+    
+    # Check if the resolved path is a valid directory
+    if os.path.isdir(source_code_dir):
         break  # Valid directory provided, exit loop
     else:
         print(f"The specified path does not exist or is not a directory: {source_code_dir}")
-        # Loop will continue, prompting the user again without an explicit 'exit' option shown
+        
+        # Offer a second chance or the option to exit
+        second_chance = input("Please provide a valid path, or press 'Enter' to exit the script: ").strip()
+        if second_chance == '':
+            print("Exiting the script. No changes made.")
+            sys.exit()
+        
+        # Resolve the second chance input to an absolute path
+        source_code_dir = os.path.abspath(second_chance)
+        if os.path.isdir(source_code_dir):
+            break  # Valid directory provided after second chance, exit loop
+        else:
+            print(f"The provided path does not exist or is not a directory: {source_code_dir}")
+            # If the second chance is also invalid, the loop will continue prompting
 
 # After determining markdown_path and source_code_dir
 # Read the Markdown file into `lines`
@@ -195,7 +198,20 @@ for sourcecode_path in files_to_process:
 # Write the modified content back to the Markdown file, updating it with the inserted source code code blocks.
 with open(markdown_path, 'w', encoding='utf-8') as md_file:
     md_file.writelines(lines)
+    
+# Extract markdown_filename from markdown_path
+markdown_filename = os.path.basename(markdown_path)
 
-print(f"Processed {processed_files_count} files.")
-print("All done! The Markdown file has been updated with the source code blocks.")
+# Construct the confirmation message based on processed_files_count
+if processed_files_count > 1:
+    process_result = f"{processed_files_count} files have been"
+elif processed_files_count == 1:
+    process_result = f"{sourcecode_filename} has been"
+else:
+    process_result = f"No files have been"
+    
+confirmation_message = f"Process complete. {process_result} added to {markdown_filename}."
 
+# Print the confirmation message
+print(confirmation_message)
+print(f"PATH: {markdown_path}")
