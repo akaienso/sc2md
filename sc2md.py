@@ -141,13 +141,22 @@ any_header_pattern = r'^#+ '
 processed_files_count = 0
 # Initialize a variable to track the last insertion index
 last_insertion_index = len(lines) - 1
+# Ensure you have the base source code directory as an absolute path for consistency
+base_source_code_dir = os.path.abspath(source_code_dir)
+processed_files_count = 0
+last_processed_filename = None  # This will hold the filename of the last file processed
 
+# Loop through each file to be processed
 for sourcecode_path in files_to_process:
-    sourcecode_filename = os.path.basename(sourcecode_path)
-    print(f"Processing {sourcecode_filename}...")
+    # Calculate the relative path of the source code file from the base source code directory
+    relative_path = os.path.relpath(sourcecode_path, start=base_source_code_dir)
+    print(f"Processing {relative_path}...")  # Update to use relative path
+
+    # Update last_processed_filename with the current file's name
+    last_processed_filename = os.path.basename(sourcecode_path)
 
     if args.interactive:
-        confirm = input(f"Inject {sourcecode_filename} into the Markdown file? (y/n): ")
+        confirm = input(f"Inject {relative_path} into the Markdown file? (y/n): ")
         if confirm.lower() != 'y':
             continue
 
@@ -156,44 +165,43 @@ for sourcecode_path in files_to_process:
             sourcecode_content = file.read()
         
         # Escape code block delimiters in the source code content
-        # This line goes right after reading the file content
         sourcecode_content = sourcecode_content.replace("```", "`\u200B``")
         
     except UnicodeDecodeError:
-        print(f"Skipping {sourcecode_path} due to encoding issues.")
+        print(f"Skipping {relative_path} due to encoding issues.")
         continue
 
-    # Define the injection point pattern using the source code filename
-    injection_point_pattern = r'^#+ ' + re.escape(sourcecode_filename) + r'$'
+    # Use the relative path in the injection point pattern
+    injection_point_pattern = r'^#+ ' + re.escape(relative_path.replace("\\", "/")) + r'$'
     injection_point_found = False
 
-    # Try to find an existing injection point
     for i, line in enumerate(lines):
         if re.match(injection_point_pattern, line.strip()):
-            injection_point_index = i + 1  # Assumes content goes after the header line
+            injection_point_index = i + 1
             injection_point_found = True
             break
 
-    # Construct the source code block with possibly escaped delimiters now
-    file_extension = sourcecode_path.split('.')[-1]
+    # Construct the source code block
+    file_extension = os.path.splitext(relative_path)[1][1:]  # Update for consistency with relative path use
     sourcecode_block = f"```{file_extension}\n{sourcecode_content}\n```\n"
 
     if injection_point_found:
         # Insert the source code content at the found injection point
         lines.insert(injection_point_index, sourcecode_block)
-        last_insertion_index = injection_point_index  # Update the last insertion index
+        last_insertion_index = injection_point_index
     else:
-        # Create a new header for the source code and append it after the last insertion point
-        new_header = f"### {sourcecode_filename}\n"
+        # Update to use relative path in the new header
+        new_header = f"### {relative_path.replace('\\', '/')}\n"  # Ensure forward slashes
         new_content = f"{new_header}{sourcecode_block}\n"
         if last_insertion_index < len(lines) - 1:
             lines.insert(last_insertion_index + 1, new_content)
         else:
             lines.append(new_content)
-        last_insertion_index = len(lines)  # Update the last insertion index to the end
+        last_insertion_index = len(lines)
 
+    # Increment the processed files count for each file processed
     processed_files_count += 1
-
+    
 # ANCHOR: Markdown File Writing
 # Write the modified content back to the Markdown file, updating it with the inserted source code code blocks.
 with open(markdown_path, 'w', encoding='utf-8') as md_file:
@@ -201,16 +209,16 @@ with open(markdown_path, 'w', encoding='utf-8') as md_file:
     
 # Extract markdown_filename from markdown_path
 markdown_filename = os.path.basename(markdown_path)
-
-# Construct the confirmation message based on processed_files_count
+# After processing all files, construct the confirmation message
 if processed_files_count > 1:
     process_result = f"{processed_files_count} files have been"
 elif processed_files_count == 1:
-    process_result = f"{sourcecode_filename} has been"
+    # Use last_processed_filename for a specific message when exactly one file was processed
+    process_result = f"'{last_processed_filename}' has been"
 else:
-    process_result = f"No files have been"
-    
-confirmation_message = f"Process complete. {process_result} added to {markdown_filename}."
+    process_result = "No files have been"
+
+confirmation_message = f"Process complete. {process_result} added to '{os.path.basename(markdown_path)}'."
 
 # Print the confirmation message
 print(confirmation_message)
